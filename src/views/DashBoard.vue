@@ -5,7 +5,7 @@
             <div class="sidebar" v-if="isAdmin">
                 <h3>Admin Panel</h3>
                 <div class="admin-stats">
-                    <p>Total Tasks: {{ tasks.length }}</p>
+                    <p>Total Todos: {{ todos.length }}</p>
                 </div>
             </div>
             <div class="main-content">
@@ -13,31 +13,34 @@
                     <h1>Todo Dashboard</h1>
                     <p class="welcome-message">
                         Welcome, {{ user?.name }} 
-                        <span class="role-badge">({{ user?.role }})</span>
+                        <span class="role-badge">({{ user?.role || 'user' }})</span>
                     </p>
                 </div>
                 
                 <div class="task-section">
-                    <h2>Create New Task</h2>
-                    <TaskForm @task-created="fetchTasks" />
+                    <h2>Create New Todo</h2>
+                    <TodoForm @todo-created="fetchTodos" />
                 </div>
                 
                 <div class="task-section">
                     <div class="section-header">
-                        <h2>Your Tasks</h2>
-                        <button @click="fetchTasks" class="btn-refresh" :disabled="loading">
+                        <h2>Your Todos</h2>
+                        <button @click="fetchTodos" class="btn-refresh" :disabled="loading">
                             {{ loading ? 'Refreshing...' : 'Refresh' }}
                         </button>
                     </div>
                     
-                    <div v-if="loading && tasks.length === 0" class="loading">
-                        Loading tasks...
+                    <div v-if="loading && todos.length === 0" class="loading">
+                        Loading todos...
                     </div>
-                    <TaskList 
+                    <div v-else-if="error" class="error-alert">
+                        {{ error }}
+                    </div>
+                    <TodoList 
                         v-else 
-                        :tasks="filteredTasks" 
-                        @task-updated="fetchTasks" 
-                        @task-deleted="fetchTasks" 
+                        :todos="filteredTodos" 
+                        @todo-updated="fetchTodos" 
+                        @todo-deleted="fetchTodos" 
                     />
                 </div>
             </div>
@@ -49,53 +52,54 @@
 import { computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import AppNavbar from '@/components/layout/AppNavbar.vue';
-import TaskForm from '@/components/tasks/TaskForm.vue';
-import TaskList from '@/components/tasks/TaskList.vue';
+import TodoForm from '@/components/todos/TodoForm.vue'; // Changed from TaskForm
+import TodoList from '@/components/todos/TodoList.vue'; // Changed from TaskList
 
 export default {
     name: 'DashBoard',
     components: {
         AppNavbar,
-        TaskForm,
-        TaskList
+        TodoForm, // Changed
+        TodoList  // Changed
     },
     setup() {
         const store = useStore();
         
         const user = computed(() => store.getters['auth/currentUser']);
         const isAdmin = computed(() => store.getters['auth/isAdmin']);
-        const tasks = computed(() => store.getters['tasks/allTasks']);
-        const loading = computed(() => store.getters['tasks/isLoading']);
+        const todos = computed(() => store.getters['todos/allTodos']); // Changed from tasks
+        const loading = computed(() => store.getters['todos/isLoading']); // Changed
+        const error = computed(() => store.getters['todos/error']); // Added error
         
-        const filteredTasks = computed(() => {
+        const filteredTodos = computed(() => {
             if (isAdmin.value) {
-                return tasks.value;
+                return todos.value;
             }
-            return store.getters['tasks/userTasks'];
+            return store.getters['todos/userTodos']; // Changed
         });
         
-        const fetchTasks = () => {
-            store.dispatch('tasks/fetchTasks');
+        const fetchTodos = () => {
+            store.dispatch('todos/fetchTodos'); // Changed from tasks
         };
         
         onMounted(() => {
-            fetchTasks();
+            fetchTodos();
         });
         
         return {
             user,
             isAdmin,
-            tasks,
+            todos, // Changed from tasks
             loading,
-            filteredTasks,
-            fetchTasks
+            error,
+            filteredTodos, // Changed from filteredTasks
+            fetchTodos     // Changed from fetchTasks
         };
     }
 };
 </script>
 
 <style scoped>
-/* Keep the same styles as before */
 .dashboard {
     min-height: 100vh;
     background: #f5f5f5;
@@ -203,6 +207,15 @@ export default {
     color: #666;
     background: #f9f9f9;
     border-radius: 8px;
+}
+
+.error-alert {
+    background: #ffebee;
+    color: #c62828;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #c62828;
+    margin: 1rem 0;
 }
 
 @media (max-width: 768px) {

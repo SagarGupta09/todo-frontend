@@ -1,12 +1,10 @@
 import { createStore } from 'vuex';
 import auth from './modules/auth';
-import tasks from './modules/tasks';
+import todos from './modules/todos';
 
-const store = createStore({
-  modules: {
-    auth,
-    tasks
-  }
+export default createStore({
+    modules: {
+        auth,
+        todos // Changed from tasks to todos
+    }
 });
-
-export default store;

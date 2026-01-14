@@ -2,12 +2,13 @@ import axios from 'axios';
 
 // Create axios instance
 const apiClient = axios.create({
-    baseURL: 'http://127.0.0.1:8000', // Note: removed /api from baseURL
+    baseURL: 'http://127.0.0.1:8000', // Laravel server
     headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
     },
-    withCredentials: true // IMPORTANT: This sends cookies with requests
+    withCredentials: true // Crucial for Sanctum
 });
 
 // Request interceptor to add token
@@ -26,10 +27,20 @@ apiClient.interceptors.request.use(
 
 // Response interceptor to handle errors
 apiClient.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        console.log(`[API Success] ${response.config.method.toUpperCase()} ${response.config.url}`);
+        return response;
+    },
     (error) => {
+        console.error('[API Error]', {
+            url: error.config?.url,
+            method: error.config?.method,
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
+        
         if (error.response && error.response.status === 401) {
-            // Clear token and redirect to login
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             window.location.href = '/login';
@@ -38,58 +49,75 @@ apiClient.interceptors.response.use(
     }
 );
 
-// NEW: Function to get CSRF cookie before making API calls
+// Function to get CSRF cookie
 export const initializeCSRF = async () => {
     try {
-        // Get CSRF cookie from Laravel Sanctum endpoint
-        await apiClient.get('/sanctum/csrf-cookie');
-        console.log('CSRF cookie set successfully');
+        // Get CSRF cookie from Sanctum
+        await axios.get('http://127.0.0.1:8000/sanctum/csrf-cookie', {
+            withCredentials: true,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        console.log('✅ CSRF cookie set successfully');
         return true;
     } catch (error) {
-        console.error('Failed to get CSRF cookie:', error);
+        console.error('❌ Failed to get CSRF cookie:', error.message);
         return false;
     }
 };
 
-// Auth endpoints (updated with full paths)
+// Initialize CSRF on module load
+initializeCSRF();
+
+// Auth endpoints - Match your Laravel routes
 export const authApi = {
     async login(credentials) {
-        // First ensure CSRF cookie is set
-        await initializeCSRF();
+        console.log('🔐 Attempting login...');
+        await initializeCSRF(); // Ensure CSRF cookie is set
         return apiClient.post('/api/login', credentials);
     },
+    
     async register(userData) {
-        // First ensure CSRF cookie is set
-        await initializeCSRF();
+        console.log('📝 Attempting registration...');
+        await initializeCSRF(); // Ensure CSRF cookie is set
         return apiClient.post('/api/register', userData);
     },
+    
     async logout() {
-        await apiClient.post('/api/logout');
-        // Clear local storage after logout
+        console.log('🚪 Logging out...');
+        const response = await apiClient.post('/api/logout');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        return response;
     },
-    async user() {
-        return apiClient.get('/api/user');
+    
+    async getUser() {
+        // Since your routes don't have /user endpoint, you might need to:
+        // 1. Add it to your Laravel routes, OR
+        // 2. Get user info from the token
+        console.warn('⚠️ /api/user endpoint not defined in your routes');
+        return Promise.reject(new Error('User endpoint not available'));
     }
 };
 
-// Task endpoints (updated with full paths)
-export const taskApi = {
+// Todo endpoints - Match your Laravel routes
+export const todoApi = {
     getAll() {
-        return apiClient.get('/api/todos'); // Changed from /tasks to /api/todos
+        return apiClient.get('/api/todos');
     },
     get(id) {
-        return apiClient.get(`/api/todos/${id}`); // Changed from /tasks
+        return apiClient.get(`/api/todos/${id}`);
     },
-    create(task) {
-        return apiClient.post('/api/todos', task); // Changed from /tasks
+    create(todo) {
+        return apiClient.post('/api/todos', todo);
     },
-    update(id, task) {
-        return apiClient.put(`/api/todos/${id}`, task); // Changed from /tasks
+    update(id, todo) {
+        return apiClient.put(`/api/todos/${id}`, todo);
     },
     delete(id) {
-        return apiClient.delete(`/api/todos/${id}`); // Changed from /tasks
+        return apiClient.delete(`/api/todos/${id}`);
     }
 };
 
