@@ -35,15 +35,18 @@ const actions = {
             const response = await authApi.login(credentials);
             console.log('✅ Login API response:', response.data);
             
-            // Assuming your API returns token and user data
             const { token, user } = response.data;
             
             if (!token) {
                 throw new Error('No token received from server');
             }
             
+            // Log the user data we received
+            console.log('👤 User data from API:', user);
+            console.log('👑 User role from API:', user?.role);
+            
             commit('SET_TOKEN', token);
-            commit('SET_USER', user || { email: credentials.email });
+            commit('SET_USER', user);
             commit('SET_AUTHENTICATED', true);
             
             return { success: true };
@@ -55,19 +58,9 @@ const actions = {
                 message: error.message
             });
             
-            let errorMessage = 'Login failed';
-            if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            } else if (error.response?.status === 422) {
-                errorMessage = 'Validation error. Please check your input.';
-            } else if (error.response?.status === 401) {
-                errorMessage = 'Invalid credentials';
-            }
-            
             return { 
                 success: false, 
-                error: errorMessage,
-                errors: error.response?.data?.errors || {}
+                error: error.response?.data?.message || 'Login failed'
             };
         }
     },
@@ -81,34 +74,17 @@ const actions = {
             
             const { token, user } = response.data;
             
-            if (!token) {
-                throw new Error('No token received from server');
-            }
-            
             commit('SET_TOKEN', token);
-            commit('SET_USER', user || { name: userData.name, email: userData.email });
+            commit('SET_USER', user);
             commit('SET_AUTHENTICATED', true);
             
             return { success: true };
             
         } catch (error) {
-            console.error('❌ Registration error:', {
-                status: error.response?.status,
-                data: error.response?.data,
-                message: error.message
-            });
-            
-            let errorMessage = 'Registration failed';
-            if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            } else if (error.response?.status === 422) {
-                errorMessage = 'Validation error. Please check your input.';
-            }
-            
+            console.error('❌ Registration error:', error);
             return { 
                 success: false, 
-                error: errorMessage,
-                errors: error.response?.data?.errors || {}
+                error: error.response?.data?.message || 'Registration failed'
             };
         }
     },
@@ -123,27 +99,56 @@ const actions = {
         }
     },
 
-    // Since you don't have /user endpoint, you might need to:
-    // 1. Add it to Laravel routes, OR
-    // 2. Store user info in token payload
-    async fetchUser({ commit, state }) {
-        if (!state.token) {
-            commit('CLEAR_AUTH');
-            return { success: false };
+    // Action to refresh user data from server
+    async refreshUser({ commit, state }) {
+        try {
+            if (!state.token) {
+                return { success: false, message: 'No token found' };
+            }
+            
+            console.log('🔄 Refreshing user data from server...');
+            const freshUser = await authApi.refreshUser();
+            
+            if (freshUser) {
+                commit('SET_USER', freshUser);
+                console.log('✅ User data updated:', freshUser);
+                return { success: true, user: freshUser };
+            }
+            
+            return { success: false, message: 'Failed to get user data' };
+        } catch (error) {
+            console.error('❌ Failed to refresh user:', error);
+            return { success: false, message: error.message };
         }
-        
-        // If you can't get user from API, you might need to decode JWT
-        // Or add a /user endpoint to your Laravel API
-        return { success: true };
+    },
+
+    // Action to check and update role if changed - FIXED LINE 126
+    async checkAndUpdateRole({ state, dispatch }) {
+        try {
+            const result = await dispatch('refreshUser');
+            if (result.success) {
+                const oldRole = state.user?.role;
+                const newRole = result.user?.role;
+                
+                if (oldRole !== newRole) {
+                    console.log(`🔄 Role changed from "${oldRole}" to "${newRole}"`);
+                    return { success: true, roleChanged: true, newRole };
+                }
+                return { success: true, roleChanged: false };
+            }
+            return result;
+        } catch (error) {
+            console.error('Error checking role:', error);
+            return { success: false, message: error.message };
+        }
     }
 };
 
 const getters = {
     isAuthenticated: state => state.isAuthenticated,
     currentUser: state => state.user,
-    isAdmin: state => state.user?.role === 'admin',
-    // You'll need to get role from user object or token
-    userRole: state => state.user?.role || 'user'
+    userRole: state => state.user?.role || 'user',
+    isAdmin: state => (state.user?.role || 'user') === 'admin'
 };
 
 export default {
